@@ -136,16 +136,24 @@ export function AiConfigDialog({
   }
 
   async function runJevTest() {
-    if (!canSaveJev || jevTestBusy) return;
+    if (jevTestBusy) return;
+    const trimmed = jevKey.trim();
+    // 空 key = 测试站内免费通道;≥8 字符 = 测试用户自己的 key;中间态不测
+    if (trimmed.length > 0 && trimmed.length < 8) return;
     setJevTestBusy(true);
     setJevMessage(null);
-    const result = await testJevConfig({ apiKey: jevKey.trim() });
+    const result = await testJevConfig(trimmed ? { apiKey: trimmed } : null);
     setJevTestBusy(false);
     setJevMessage(
       result.ok
         ? {
             ok: true,
-            text: t(`连接成功（模型：${result.model}）`, `Connected (model: ${result.model})`),
+            text: trimmed
+              ? t(`连接成功（模型：${result.model}）`, `Connected (model: ${result.model})`)
+              : t(
+                  `免费通道可用（模型：${result.model}）`,
+                  `Free channel available (model: ${result.model})`,
+                ),
           }
         : { ok: false, text: jevFailureText(result, t) },
     );
@@ -379,8 +387,8 @@ export function AiConfigDialog({
           </div>
           <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, marginBottom: 10 }}>
             {t(
-              "用于准备页的「AI 快排」：决策模型依据你的历史取舍预测整份榜单顺序。只需 API Key，在 console.typesafe.ai 申请；Key 仅保存在本浏览器。",
-              'Powers "AI quick rank" on the prepare page: a decision model predicts the whole ranking from your history. Key only — get one at console.typesafe.ai; stored in this browser only.',
+              "用于准备页的「AI 快排」与排序中的「Jev 代判」。未配置 Key 时自动使用站内免费通道（限频共用）；也可填自己的 API Key（console.typesafe.ai 申请），Key 仅保存在本浏览器。",
+              'Powers "AI quick rank" on the prepare page and "Jev assist" while sorting. Without a key, the built-in free channel is used automatically (shared, rate-limited); or add your own key from console.typesafe.ai — stored in this browser only.',
             )}
           </p>
           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
@@ -395,12 +403,16 @@ export function AiConfigDialog({
             />
             <button
               className="button secondary"
-              disabled={!canSaveJev || jevTestBusy}
+              disabled={(jevKey.trim().length > 0 && !canSaveJev) || jevTestBusy}
               onClick={() => void runJevTest()}
               style={{ minHeight: 36, paddingInline: 10, fontSize: 12 }}
             >
               <Sparkles size={14} />
-              {jevTestBusy ? t("测试中…", "Testing…") : t("测试", "Test")}
+              {jevTestBusy
+                ? t("测试中…", "Testing…")
+                : jevKey.trim().length === 0
+                  ? t("测试免费通道", "Test free channel")
+                  : t("测试", "Test")}
             </button>
             <button
               className="button secondary"

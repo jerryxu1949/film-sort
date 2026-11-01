@@ -10,6 +10,39 @@
 
 ## 进行中 / 最近
 
+### T-20261101-JEV-FREE · Jev 站内免费通道（内置 Key 走 Worker Secret） · 👀 已部署，线上 API 已验证，待 UI 走查
+
+- **起因**：站主要求把一把 TypeSafe Key 以 Secret 形式放进 CF Worker（绝不明文进仓库），
+  上游走自建反代 `jev.logicc.top/v1/systemone`，作为**内置 Jev 免费端口**——未配置 Key
+  的用户也能用 AI 快排 / Jev 代判 / 预测分歧。
+- **改动**：
+  - `worker/typesafe.ts`：`JEV_BUILTIN_URL` 常量；config 参数扩为 `JevCallConfig {apiKey, url?}`；
+    新增纯函数 `resolveJevConfig(raw, useBuiltin, builtinKey)`（用户 Key 优先 → `useBuiltin`+Secret
+    走免费通道 → null）；`fetchBounded` allowedHosts 扩为 `["api.typesafe.ai","jev.logicc.top"]`。
+  - `worker/index.ts`：`Env.JEV_API_KEY?`；四个 `/api/ai/jev/*` 端点共用 `resolveJevRequestConfig`
+    —— 通道未开 `503 builtin_unavailable`（新错误码），未配 Key 照旧 `400 invalid_config`；
+    限频桶不变（两通道共用）。消歧端点「未配置 key 一律 400」注释已改写（失败仍回落规则）。
+  - `src/lib/typesafe.ts`：三个请求函数 config 改可空，请求体 `useBuiltin: !config`；
+    错误码补 `builtin_unavailable` 双语文案。
+  - 调用方：`useSorting.startJevRanking` 去掉无 Key 拦截；`SortingView` 代判 effect 无 Key 也发起
+    （静默失败不变）；`JevDivergenceCard` 传可空 config；`AiConfigDialog` 空 Key「测试免费通道」
+    + 说明文案；`App.tsx` 引导 3 处文案同步（ui-guide.test.ts 绊线短语全保留）。
+  - 测试：`worker/typesafe.test.ts` +6（判定矩阵 / 免费通道路由）；`src/lib/typesafe.test.ts` +4
+    （请求契约 / 错误文案）。
+  - 文档：`docs/API.md`（4 端点 + 695 行铁律改写）、`README.md`、`docs/FEATURES.md` §12、
+    `docs/USAGE.md`（5 处）、`CHANGELOG.md`、`AGENTS.md` 规则 5 括注、`wrangler.jsonc` 注释。
+- **验证（本地）**：五道门禁全绿（check / lint / format:check / test 1011 passed 9 skipped / build）。
+- **上游实测**（2026-11-01）：`jev.logicc.top/v1/systemone` + 该 Key curl 通，返回
+  `jev-1.13-free`（`cost: 0`，确为免费端点）。
+- **线上验证**（2026-11-01，Secret 已 `wrangler secret put`，版本 `234689a9` 已部署）：
+  - ✅ `POST /api/ai/jev/test` + `{"useBuiltin":true}` → 200 `{ok:true,model:"jev-1.13-free"}`。
+  - ✅ `POST /api/ai/jev-rank` 免费通道全链路 → 200 `{order:[1,0],scores:[0.55,0.51]}`。
+  - ✅ 无凭据不带 `useBuiltin` → 400 `invalid_config`（既有契约无回归）。
+  - ⬜ **线上 UI 走查**（未验）：真实浏览器开 sort.logicc.top，无 Key 状态下走「AI 快排」、
+    开「Jev 代判」排序、「预测分歧」卡、AI 服务弹窗「测试免费通道」。
+- **下一步**：UI 走查通过后标 ✅。
+- **遗留风险**：免费通道为站主配额，限频沿用 per-IP 桶；若被盗刷可调小桶或按登录态收紧。
+
 ### T-20261030-GUIDE · 站内使用说明 / 技术说明重写 + 弹窗焦点位置修复 · 👀 已上线，待线上走查
 
 - **起因**：UI 里「?」弹开的两块文案自 2026-10-14/18 后只被 UI 重构扫过（10-28 把 9 份手写

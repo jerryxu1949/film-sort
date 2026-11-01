@@ -3,6 +3,22 @@
 > 2026-10-29 三批收口的完整复核记录（发现项、根因、验证、线上回归清单）见
 > [`docs/REVIEW-2026-10-29.md`](docs/REVIEW-2026-10-29.md)。
 
+## 2026-11-01 · Jev 站内免费通道（内置 Key 走 Worker Secret）
+
+**背景**：Jev（TypeSafe 快排/代判/预测分歧）此前要求每个用户自己申请 API Key。
+现在站主提供**内置免费通道**：未配置 Key 的用户也能直接用 Jev。
+
+- **Worker 侧**：新增 Secret `JEV_API_KEY`（`wrangler secret put`，不落库、不进仓库）。
+  `worker/typesafe.ts` 新增 `resolveJevConfig` 凭据判定矩阵——用户 Key 合法永远优先（直连
+  `api.typesafe.ai`）；`useBuiltin: true` 且 Secret 存在 → 走站主反代 `jev.logicc.top`；
+  通道未开 → `503 builtin_unavailable`（新错误码），未配 Key 且未标记 → 照旧 `400 invalid_config`。
+  四个 `/api/ai/jev/*` 端点共用此解析；`fetchBounded` 白名单扩至两上游，限频桶不变（两通道共用）。
+- **前端侧**：`lib/typesafe.ts` 三个请求函数的 config 改为可空（`useBuiltin: !config`）；
+  AI 快排 / Jev 代判 / 预测分歧在未配置 Key 时不再拦截或静默跳过，直接走免费通道；
+  「AI 服务」弹窗 Jev 区支持空 Key「测试免费通道」，说明文案同步。引导文案（9 步版）同步。
+- **硬规则口径**：规则 5「用户 API Key 只存浏览器 localStorage」不变——免费通道的
+  站主 Key 是站主自己的凭据，按 `AI_API_KEY` 先例以 Worker Secret 存放（`AGENTS.md` 已补括注）。
+
 ## 2026-10-30 · 文档事实校正与缺口补写（离线使用 / 弹窗焦点约定 / SW 架构）
 
 **背景**：上一条把两个弹窗重写后又发现文档侧两类问题——**写错的事实**与**整块缺席的能力**。

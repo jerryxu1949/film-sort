@@ -2390,8 +2390,8 @@ export default function App() {
                 </strong>
                 <p>
                   {t(
-                    "设置 → AI 服务：AI 点评默认走服务端内置模型，也可填自己的 Base URL / API Key / Model。同一弹窗里填入 TypeSafe Key 后，准备页会出现「AI 快排」——一次预测直接成榜，跳过逐对比较（最多 255 件）。",
-                    "Settings → AI services. AI notes use a built-in model by default; you can plug in your own Base URL / API key / model instead. With a TypeSafe key in the same dialog, a Quick rank button appears on the setup page: one prediction produces the whole list, skipping pairwise sorting (up to 255 works).",
+                    "设置 → AI 服务：AI 点评默认走服务端内置模型，也可填自己的 Base URL / API Key / Model。Jev 快排不用配置也能用——未填 TypeSafe Key 时自动走站内免费通道；填入自己的 Key 则优先用你的（准备页出现「AI 快排」——一次预测直接成榜，跳过逐对比较，最多 255 件）。",
+                    "Settings → AI services. AI notes use a built-in model by default; you can plug in your own Base URL / API key / model instead. Quick rank works out of the box: with no TypeSafe key it uses the built-in free channel; your own key takes priority once added (a Quick rank button appears on the setup page: one prediction produces the whole list, skipping pairwise sorting, up to 255 works).",
                   )}
                 </p>
               </div>
@@ -2402,8 +2402,8 @@ export default function App() {
                 <strong>{t("（可选）Jev 代判", "(Optional) Jev decides")}</strong>
                 <p>
                   {t(
-                    "同样在「AI 服务」里打开「Jev 代判」并选置信阈值（默认 80%，50–90% 五档）：达到阈值的那一对自动落位，标注「上一对由 Jev 代判 · 置信 N%」，随时可撤销；没达标的仍交给你自己。调低更省事，调高更保守。",
-                    "Still in AI services, switch on Jev decides and pick a confidence threshold (80% by default, five steps from 50% to 90%): a pair that clears it is settled automatically and labelled 'Last pair decided by Jev · N% confidence', undoable at any time. Anything below the bar stays yours. Lower means less work, higher means more caution.",
+                    "同样在「AI 服务」里打开「Jev 代判」并选置信阈值（默认 80%，50–90% 五档）：达到阈值的那一对自动落位，标注「上一对由 Jev 代判 · 置信 N%」，随时可撤销；没达标的仍交给你自己。调低更省事，调高更保守。代判同样支持站内免费通道，不配 Key 也能用。",
+                    "Still in AI services, switch on Jev decides and pick a confidence threshold (80% by default, five steps from 50% to 90%): a pair that clears it is settled automatically and labelled 'Last pair decided by Jev · N% confidence', undoable at any time. Anything below the bar stays yours. Lower means less work, higher means more caution. Assist also works on the built-in free channel, no key needed.",
                   )}
                 </p>
               </div>
@@ -2575,8 +2575,8 @@ export default function App() {
               <div className="tech-body">
                 <p>
                   {t(
-                    "三条独立通道，互不影响：AI 点评（文字解读）、AI 快排（一次成榜）、Jev 代判（逐对替你选择）。点评走「AI 服务」里配置的通用模型，快排与代判共用同一把 TypeSafe Key。",
-                    "Three independent channels: AI notes (text), quick rank (one-shot ranking), and Jev decides (pair by pair). Notes use the general model configured in AI services; quick rank and Jev share one TypeSafe key.",
+                    "三条独立通道，互不影响：AI 点评（文字解读）、AI 快排（一次成榜）、Jev 代判（逐对替你选择）。点评走「AI 服务」里配置的通用模型；快排与代判共用同一把 TypeSafe Key——没配 Key 时走站主提供的免费通道（Worker Secret 保管，浏览器看不到），配置了就用你自己的。",
+                    "Three independent channels: AI notes (text), quick rank (one-shot ranking), and Jev decides (pair by pair). Notes use the general model configured in AI services; quick rank and Jev share one TypeSafe key — with no key configured they ride the owner-provided free channel (held as a Worker secret, never visible to the browser), and your own key takes priority once set.",
                   )}
                 </p>
                 <p>

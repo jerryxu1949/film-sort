@@ -3,13 +3,15 @@
  *
  * 只做「决策」不做生成:把用户品味上下文 + 清单作品组装成一次 systemone
  * 调用(每件作品一个 Noul 问题,模型并行评估、互不污染),返回带 0–1
- * 校准概率的排序。上游地址固定 api.typesafe.ai(非用户可控 URL,允许走
- * fetchBounded 精确白名单);用户的 apiKey 由前端透传,本模块不落盘。
+ * 校准概率的排序。两条上游均固定、非用户可控(允许走 fetchBounded 精确
+ * 白名单):用户自己的 apiKey 走 api.typesafe.ai,由前端透传、本模块不落盘;
+ * 站主内置免费通道的 apiKey 存 Worker Secret(JEV_API_KEY),走 jev.logicc.top。
  */
 import { AiError } from "./ai";
 import { OutboundError, fetchBounded, readBoundedJson } from "./outbound";
 
 const SYSTEMONE_URL = "https://api.typesafe.ai/v1/systemone";
+const JEV_BUILTIN_URL = "https://jev.logicc.top/v1/systemone";
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const CONTROL_RE = /[\u0000-\u001f\u007f]/; // 与 ai.ts validateUserConfig 同口径
 
@@ -47,6 +49,30 @@ export function validateJevConfig(raw: unknown): { apiKey: string } | null {
   const apiKey = cfg.apiKey;
   if (apiKey.length < 8 || apiKey.length > 256 || CONTROL_RE.test(apiKey)) return null;
   return { apiKey };
+}
+
+/** 一次 Jev 调用的凭据:用户 key 直连官方;内置免费通道另带站主反代地址。 */
+export interface JevCallConfig {
+  apiKey: string;
+  /** 缺省 = 官方 api.typesafe.ai;内置免费通道为 JEV_BUILTIN_URL。 */
+  url?: string;
+}
+
+/**
+ * 解析一次 Jev 请求该用哪把 key:用户 config 合法 → 用户 key 优先(直连官方);
+ * 否则请求方显式要求内置免费通道(useBuiltin)且站主 Secret 存在 → 内置 key。
+ * 都不满足返回 null,由端点区分 invalid_config / builtin_unavailable。
+ */
+export function resolveJevConfig(
+  raw: unknown,
+  useBuiltin: unknown,
+  builtinKey: string | undefined,
+): JevCallConfig | null {
+  const user = validateJevConfig(raw);
+  if (user) return user;
+  if (useBuiltin === true && typeof builtinKey === "string" && builtinKey.length >= 8)
+    return { apiKey: builtinKey, url: JEV_BUILTIN_URL };
+  return null;
 }
 
 const clean = (value: string, max: number) => value.replace(/\s+/g, " ").trim().slice(0, max);
@@ -120,21 +146,23 @@ interface SystemOneResponse {
 
 async function callSystemOne(
   payload: unknown,
-  apiKey: string,
+  config: JevCallConfig,
   fetchImpl: typeof fetch,
 ): Promise<SystemOneResponse> {
   let response: Response;
   try {
     response = await fetchBounded(
-      SYSTEMONE_URL,
+      config.url ?? SYSTEMONE_URL,
       {
         method: "POST",
-        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+        headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
         body: JSON.stringify(payload),
       },
       // 上游域名固定、非用户可控:精确白名单 + 30s 超时 + 1MB 响应上限。
+      // jev.logicc.top 是站主自建反代,仅供内置免费通道;两个主机都进白名单,
+      // 反代若 30x 到官方域也能逐跳复核通过。
       {
-        allowedHosts: ["api.typesafe.ai"],
+        allowedHosts: ["api.typesafe.ai", "jev.logicc.top"],
         maxBytes: MAX_RESPONSE_BYTES,
         timeoutMs: 30_000,
         maxRedirects: 2,
@@ -176,7 +204,7 @@ async function callSystemOne(
 
 export async function jevRank(
   input: JevRankInput,
-  config: { apiKey: string },
+  config: JevCallConfig,
   fetchImpl: typeof fetch = fetch,
 ): Promise<JevRankResult> {
   if (!Array.isArray(input.works) || input.works.length < 1 || input.works.length > 255)
@@ -186,7 +214,7 @@ export async function jevRank(
     state: buildJevState(input),
     questions: buildJevQuestions(input),
   };
-  const body = await callSystemOne(payload, config.apiKey, fetchImpl);
+  const body = await callSystemOne(payload, config, fetchImpl);
   const answers = body.answers ?? {};
   // 缺答案按 0 分垫底(而不是整单失败):单作品评估互不影响,个别缺失
   // 不应否定其余作品的排序。
@@ -264,7 +292,7 @@ export function parseJevChooseBody(body: Record<string, unknown>): JevChooseInpu
  */
 export async function jevChoose(
   input: JevChooseInput,
-  config: { apiKey: string },
+  config: JevCallConfig,
   fetchImpl: typeof fetch = fetch,
 ): Promise<JevChooseResult> {
   const zh = (input.locale ?? "zh") === "zh";
@@ -283,7 +311,7 @@ export async function jevChoose(
       },
     },
   };
-  const body = await callSystemOne(payload, config.apiKey, fetchImpl);
+  const body = await callSystemOne(payload, config, fetchImpl);
   const answer = body.answers?.which;
   const pick = answer?.choice;
   const known = new Set(input.options.map((option) => option.key));
@@ -339,7 +367,7 @@ const cleanWork = (work: JevWorkInput): string => {
  */
 export async function jevPick(
   input: JevPickInput,
-  config: { apiKey: string },
+  config: JevCallConfig,
   fetchImpl: typeof fetch = fetch,
 ): Promise<JevPickResult> {
   const zh = (input.locale ?? "zh") === "zh";
@@ -365,7 +393,7 @@ export async function jevPick(
       },
     },
   };
-  const body = await callSystemOne(payload, config.apiKey, fetchImpl);
+  const body = await callSystemOne(payload, config, fetchImpl);
   const answer = body.answers?.pick;
   const pick = answer?.choice;
   if (pick !== "left" && pick !== "right")
@@ -435,7 +463,7 @@ export function parseJevPickBody(body: Record<string, unknown>): JevPickInput | 
 }
 
 export async function testJevConnection(
-  config: { apiKey: string },
+  config: JevCallConfig,
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ ok: true; model: string }> {
   const body = await callSystemOne(
@@ -444,7 +472,7 @@ export async function testJevConnection(
       state: "This is a connectivity test.",
       questions: { ping: { type: "noul", instructions: "Is this text a connectivity test?" } },
     },
-    config.apiKey,
+    config,
     fetchImpl,
   );
   if (typeof body.answers?.ping?.noul !== "number")

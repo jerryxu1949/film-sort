@@ -9,6 +9,9 @@ import {
   jevFailureText,
   readJevAssistThreshold,
   readTypesafeConfig,
+  requestJevPick,
+  requestJevRanking,
+  testJevConfig,
   writeJevAssistThreshold,
   writeTypesafeConfig,
 } from "./typesafe";
@@ -66,6 +69,100 @@ describe("jevFailureText", () => {
     const text = jevFailureText({ ok: false, error: "upstream_blocked" }, zh);
     expect(text).toContain("地区");
     expect(text).toContain("与 key 无关");
+  });
+
+  it("免费通道不可用（builtin_unavailable）指引配置自己的 key", () => {
+    const zh = (text: string) => text;
+    const text = jevFailureText({ ok: false, error: "builtin_unavailable" }, zh);
+    expect(text).toContain("免费通道");
+    expect(text).toContain("AI 服务");
+  });
+});
+
+describe("免费通道请求契约", () => {
+  const okRank = () =>
+    new Response(
+      JSON.stringify({
+        ok: true,
+        model: "jev-1.13-free",
+        order: [0],
+        scores: [0.9],
+        inputTokens: 1,
+      }),
+      { status: 200 },
+    );
+
+  it("config=null 时发 useBuiltin:true;有自己的 key 时不发 useBuiltin", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return okRank();
+      }),
+    );
+    const input = {
+      kind: "film",
+      collectionTitle: "片单",
+      works: [{ id: "a", title: "A" }],
+      locale: "zh" as const,
+    };
+    await requestJevRanking(input, null);
+    expect(bodies[0].useBuiltin).toBe(true);
+    expect(bodies[0].config).toBeNull();
+    await requestJevRanking(input, { apiKey: "ts_key12345" });
+    expect(bodies[1].useBuiltin).toBeUndefined();
+    expect(bodies[1].config).toEqual({ apiKey: "ts_key12345" });
+    vi.unstubAllGlobals();
+  });
+
+  it("requestJevPick 同样按 config 有无切换 useBuiltin", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            pick: "left",
+            confidence: 0.9,
+            probabilities: { left: 0.9, right: 0.1 },
+            model: "jev-1.13-free",
+            inputTokens: 1,
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+    const input = {
+      kind: "film",
+      left: { title: "A" },
+      right: { title: "B" },
+      locale: "zh" as const,
+    };
+    await requestJevPick(input, null);
+    expect(bodies[0].useBuiltin).toBe(true);
+    await requestJevPick(input, { apiKey: "ts_key12345" });
+    expect(bodies[1].useBuiltin).toBeUndefined();
+    vi.unstubAllGlobals();
+  });
+
+  it("testJevConfig(null) 测的是免费通道", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({ ok: true, model: "jev-1.13-free" }), {
+          status: 200,
+        });
+      }),
+    );
+    const result = await testJevConfig(null);
+    expect(result).toEqual({ ok: true, model: "jev-1.13-free" });
+    expect(bodies[0]).toEqual({ config: null, useBuiltin: true });
+    vi.unstubAllGlobals();
   });
 });
 

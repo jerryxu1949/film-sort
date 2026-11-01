@@ -8,6 +8,7 @@ import {
   parseJevChooseBody,
   parseJevPickBody,
   parseJevRankBody,
+  resolveJevConfig,
   testJevConnection,
   validateJevConfig,
 } from "./typesafe";
@@ -24,6 +25,33 @@ describe("validateJevConfig", () => {
     expect(validateJevConfig({ apiKey: "bad\nkey123" })).toBeNull();
     expect(validateJevConfig({ apiKey: 123 })).toBeNull();
     expect(validateJevConfig(null)).toBeNull();
+  });
+});
+
+describe("resolveJevConfig", () => {
+  const BUILTIN_KEY = "jv_builtin_secret_key";
+  it("用户 key 合法时永远优先,不带内置 URL(直连官方)", () => {
+    expect(resolveJevConfig({ apiKey: "ts_user_key123" }, true, BUILTIN_KEY)).toEqual({
+      apiKey: "ts_user_key123",
+    });
+    expect(resolveJevConfig({ apiKey: "ts_user_key123" }, false, BUILTIN_KEY)).toEqual({
+      apiKey: "ts_user_key123",
+    });
+  });
+  it("无用户 key + useBuiltin + Secret 存在 → 内置 key + 站主反代地址", () => {
+    expect(resolveJevConfig(null, true, BUILTIN_KEY)).toEqual({
+      apiKey: BUILTIN_KEY,
+      url: "https://jev.logicc.top/v1/systemone",
+    });
+    expect(resolveJevConfig({ apiKey: 123 }, true, BUILTIN_KEY)?.url).toBe(
+      "https://jev.logicc.top/v1/systemone",
+    );
+  });
+  it("未标记 useBuiltin、Secret 缺失或过短都返回 null(端点自行区分错误码)", () => {
+    expect(resolveJevConfig(null, undefined, BUILTIN_KEY)).toBeNull();
+    expect(resolveJevConfig(null, false, BUILTIN_KEY)).toBeNull();
+    expect(resolveJevConfig(null, true, undefined)).toBeNull();
+    expect(resolveJevConfig(null, true, "short")).toBeNull();
   });
 });
 
@@ -151,6 +179,32 @@ describe("jevRank", () => {
       code: "invalid_data",
     });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("内置免费通道(站主 Secret 走 jev.logicc.top)", () => {
+  const BUILTIN = {
+    apiKey: "jv_builtin_secret_key",
+    url: "https://jev.logicc.top/v1/systemone",
+  };
+  it("带 url 的 config 走站主反代并带上内置 key", async () => {
+    const fetchImpl = stubFetch((url, init) => {
+      expect(url).toBe("https://jev.logicc.top/v1/systemone");
+      expect((init?.headers as Record<string, string>).authorization).toBe(
+        "Bearer jv_builtin_secret_key",
+      );
+      return okResponse({ w0: { noul: 0.7 } });
+    });
+    const result = await jevRank(input, BUILTIN, fetchImpl);
+    expect(result.order).toEqual([0, 1]);
+  });
+  it("testJevConnection 同样按 config.url 路由", async () => {
+    const fetchImpl = stubFetch((url) => {
+      expect(url).toBe("https://jev.logicc.top/v1/systemone");
+      return okResponse({ ping: { noul: 0.9 } });
+    });
+    const result = await testJevConnection(BUILTIN, fetchImpl);
+    expect(result).toEqual({ ok: true, model: "jev-1.13.0" });
   });
 });
 

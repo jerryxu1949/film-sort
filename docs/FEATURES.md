@@ -193,7 +193,8 @@
 | 功能 | 入口 | 实现 |
 |---|---|---|
 | AI 快排（≤255 件单次打分直接成榜；第三种成榜方式） | 准备页「AI 快排」 | `POST /api/ai/jev-rank` + `lib/typesafe.ts requestJevRanking` |
-| 连接测试 / Key 用户自配（localStorage，服务端不落盘） | 「AI 服务」Jev 区 | `POST /api/ai/jev/test` + `AiConfigDialog` Jev 小节 |
+| 连接测试 / Key 用户自配（localStorage，服务端不落盘；空 Key 可测站内免费通道） | 「AI 服务」Jev 区 | `POST /api/ai/jev/test` + `AiConfigDialog` Jev 小节 |
+| **站内免费通道（2026-11-01 新增）**：未配置 Key 时 `useBuiltin: true`，Worker 用站主 Secret `JEV_API_KEY`（`wrangler secret put`，不落库不进仓库）走 `jev.logicc.top` 反代；用户 Key 永远优先、直连官方 | 全部 Jev 功能隐式生效 | `worker/typesafe.ts resolveJevConfig`（凭据判定矩阵 + `builtin_unavailable` 503） |
 | 预测分歧洞察（比较页：用我的品味预测对方排名，偏差 Top3 = 对方最出乎我意料的作品） | 相遇页「预测分歧 · JEV」卡 | 复用 `/api/ai/jev-rank` + `JevDivergenceCard`（数据签名过期守卫；失败分类带「去配置」入口） |
 | 分享/广场 OG 卡片（爬虫可取，豆瓣图走代理） | worker HTML 注入 | `worker/og.ts` + `/share/:code`、`/plaza/:id` 路由 |
 | 广场品味相似度（卡片「重合 N/3」、详情「重合 NN%」） | PlazaView / PlazaPostView | `lib/similarity.ts rankingSimilarity`（workIdentity 口径） |

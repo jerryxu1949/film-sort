@@ -69,7 +69,7 @@ export function JevDivergenceCard({
         profileContext,
         locale,
       },
-      readTypesafeConfig() ?? { apiKey: "" },
+      readTypesafeConfig(), // 未配置 key 时为 null → 走站内免费通道
     );
     setResult(outcome);
     setShownKey(dataKey);

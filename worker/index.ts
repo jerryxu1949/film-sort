@@ -108,8 +108,9 @@ import {
   parseJevChooseBody,
   parseJevPickBody,
   parseJevRankBody,
+  resolveJevConfig,
   testJevConnection,
-  validateJevConfig,
+  type JevCallConfig,
 } from "./typesafe";
 
 export interface Env {
@@ -128,6 +129,8 @@ export interface Env {
   AI_PROTOCOL?: string;
   /** anysearch 搜索服务 key（简介百科传输）；缺省走匿名额度 */
   ANYSEARCH_API_KEY?: string;
+  /** 站主内置 Jev 免费通道 key（Secret：wrangler secret put JEV_API_KEY）；缺省=免费通道关闭 */
+  JEV_API_KEY?: string;
   COOKIE_ENC_KEY?: string;
   MUSIC_PROXY_URL?: string;
   MUSIC_PROXY_KEY?: string;
@@ -335,6 +338,30 @@ function json(data: unknown, status = 200, extraHeaders?: HeadersInit): Response
     new Headers(extraHeaders).forEach((value, key) => headers.set(key, value));
   }
   return withSecurityHeaders(new Response(JSON.stringify(data), { status, headers }));
+}
+
+/**
+ * Jev 端点共用的凭据解析：用户 key 合法 → 优先（直连官方）；未配置 key 且
+ * 前端显式要求内置免费通道（useBuiltin）→ 站主 Secret（走 jev.logicc.top）。
+ * 返回 Response 表示应直接回给调用方的错误：
+ * builtin_unavailable 503（通道未开）/ invalid_config 400（维持既有回落契约）。
+ */
+function resolveJevRequestConfig(body: JsonObject, env: Env): JevCallConfig | Response {
+  const config = resolveJevConfig(body.config, body.useBuiltin, env.JEV_API_KEY);
+  if (config) return config;
+  if (body.useBuiltin === true)
+    return json(
+      {
+        ok: false,
+        error: "builtin_unavailable",
+        msg: "站内免费通道暂不可用，可在「AI 服务」配置自己的 TypeSafe Key",
+      },
+      503,
+    );
+  return json(
+    { ok: false, error: "invalid_config", msg: "TypeSafe API Key 不合法（长度 8-256）" },
+    400,
+  );
 }
 
 /** CSV 单元格：转义引号，并对公式注入做防护。
@@ -2181,14 +2208,10 @@ async function route(request: Request, env: Env): Promise<Response> {
         "retry-after": "600",
       });
     const body = await readJson(request);
-    const config = validateJevConfig(body.config);
-    if (!config)
-      return json(
-        { ok: false, error: "invalid_config", msg: "TypeSafe API Key 不合法（长度 8-256）" },
-        400,
-      );
+    const resolved = resolveJevRequestConfig(body, env);
+    if (resolved instanceof Response) return resolved;
     try {
-      return json(await testJevConnection(config));
+      return json(await testJevConnection(resolved));
     } catch (error) {
       return json({ ok: false, ...aiErrorPayload(error) }, aiErrorStatus(error));
     }
@@ -2200,16 +2223,12 @@ async function route(request: Request, env: Env): Promise<Response> {
         "retry-after": "600",
       });
     const body = await readJson(request);
-    const config = validateJevConfig(body.config);
-    if (!config)
-      return json(
-        { ok: false, error: "invalid_config", msg: "TypeSafe API Key 不合法（长度 8-256）" },
-        400,
-      );
+    const resolved = resolveJevRequestConfig(body, env);
+    if (resolved instanceof Response) return resolved;
     const parsed = parseJevRankBody(body);
     if (!parsed) return json({ ok: false, error: "invalid_data", msg: "作品数据不合法" }, 400);
     try {
-      const result = await jevRank(parsed, config);
+      const result = await jevRank(parsed, resolved);
       return json({ ok: true, ...result }, 200, { "cache-control": "no-store" });
     } catch (error) {
       return json({ ok: false, ...aiErrorPayload(error) }, aiErrorStatus(error));
@@ -2222,22 +2241,15 @@ async function route(request: Request, env: Env): Promise<Response> {
         "retry-after": "600",
       });
     const body = await readJson(request);
-    // 未配置 key 一律 400：调用方据此回落规则路径，主链路永不依赖本端点
+    // 解析失败一律非 2xx：调用方据此回落规则路径，主链路永不依赖本端点
     // （docs/agents/CONVENTIONS.md §3「主链路永不依赖外部决策服务」）。
-    const config = validateJevConfig(body.config);
-    if (!config)
-      return json(
-        {
-          ok: false,
-          error: "invalid_config",
-          msg: "未配置 TypeSafe API Key，请回落到规则解析",
-        },
-        400,
-      );
+    // 有内置免费通道时未配置 key 不再必然 400，但失败仍回落，契约不变。
+    const resolved = resolveJevRequestConfig(body, env);
+    if (resolved instanceof Response) return resolved;
     const parsed = parseJevChooseBody(body);
     if (!parsed) return json({ ok: false, error: "invalid_data", msg: "候选数据不合法" }, 400);
     try {
-      const result = await jevChoose(parsed, config);
+      const result = await jevChoose(parsed, resolved);
       return json({ ok: true, ...result }, 200, { "cache-control": "no-store" });
     } catch (error) {
       return json({ ok: false, ...aiErrorPayload(error), fallback: "rules" }, aiErrorStatus(error));
@@ -2251,16 +2263,12 @@ async function route(request: Request, env: Env): Promise<Response> {
         "retry-after": "600",
       });
     const body = await readJson(request);
-    const config = validateJevConfig(body.config);
-    if (!config)
-      return json(
-        { ok: false, error: "invalid_config", msg: "TypeSafe API Key 不合法（长度 8-256）" },
-        400,
-      );
+    const resolved = resolveJevRequestConfig(body, env);
+    if (resolved instanceof Response) return resolved;
     const parsed = parseJevPickBody(body);
     if (!parsed) return json({ ok: false, error: "invalid_data", msg: "作品数据不合法" }, 400);
     try {
-      const result = await jevPick(parsed, config);
+      const result = await jevPick(parsed, resolved);
       return json({ ok: true, ...result }, 200, { "cache-control": "no-store" });
     } catch (error) {
       return json({ ok: false, ...aiErrorPayload(error) }, aiErrorStatus(error));

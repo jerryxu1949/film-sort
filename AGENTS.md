@@ -72,7 +72,7 @@ npm run build          # 构建
 2. **对外 fetch 必须走 `worker/outbound.ts` 的 `fetchBounded`** —— host 白名单 + 逐跳 redirect 复核 + 字节上限。
 3. **图片来源只由 `worker/media.ts` 的 `allowedImage()` 判定** —— 改外部图源时同步 CSP 与图片代理白名单。
 4. **海报 URL 绝不写进 `items`** —— 走 `poster_urls` 侧表；落库字段白名单唯一出口是 `shared/storedItem.ts`。
-5. **用户 API Key（AI/Jev）只存浏览器 localStorage**，Worker 不落盘。
+5. **用户 API Key（AI/Jev）只存浏览器 localStorage**，Worker 不落盘。（站主自有凭据例外：`AI_API_KEY` 与 Jev 免费通道 `JEV_API_KEY` 以 Worker Secret 存放，绝不进仓库/DB。）
 6. **管理后台动态内容渲染前必须 HTML 转义**（存储型 XSS）。
 7. **异步写状态必须有代际/键控守卫** —— 迟到响应一律丢弃，绝不覆盖用户真实选择。
 8. **读侧永不因校验失败删数据。**

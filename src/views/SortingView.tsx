@@ -73,8 +73,8 @@ export function SortingView({
       return;
     }
     if (!readJevAssistEnabled()) return;
+    // 未配置 key 走站内免费通道(config=null);失败/低置信照旧静默交还用户
     const config = readTypesafeConfig();
-    if (!config) return;
     const left = worksById.get(comparison.leftId);
     const right = worksById.get(comparison.rightId);
     if (!left || !right) return;

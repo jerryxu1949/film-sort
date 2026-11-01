@@ -646,15 +646,15 @@ ART/RANK 后端 API 完整参考。所有接口由 Cloudflare Worker 处理，�
 
 ### POST /api/ai/jev/test
 
-TypeSafe（Jev）连接测试：向固定上游 `https://api.typesafe.ai/v1/systemone` 发一次单问题 Noul 探活。Key 由前端透传（存于用户浏览器 localStorage），服务端不存储。
+TypeSafe（Jev）连接测试：向 systemone 上游发一次单问题 Noul 探活。凭据二选一：用户自己的 Key 由前端透传（存于用户浏览器 localStorage，服务端不存储，直连官方 `api.typesafe.ai`）；未配置 Key 时前端发 `useBuiltin: true`，Worker 用站主 Secret `JEV_API_KEY` 走免费通道反代 `jev.logicc.top`（Secret 经 `wrangler secret put` 注入，不落库、不进仓库）。
 
-**请求体：** `{ "config": { "apiKey": "…（8-256 字符）" } }`
-**响应：** `{ "ok": true, "model": "jev-1.13.0" }` 或 `{ "ok": false, "error": "…", "msg": "…" }`。
-**限流：** 桶 `ai_jev_test` 5 次/10 分钟。
+**请求体：** `{ "config": { "apiKey": "…（8-256 字符）" } }` 或 `{ "config": null, "useBuiltin": true }`
+**响应：** `{ "ok": true, "model": "jev-1.13.0" }` 或 `{ "ok": false, "error": "…", "msg": "…" }`（`useBuiltin` 但通道未开启 → `503 builtin_unavailable`）。
+**限流：** 桶 `ai_jev_test` 5 次/10 分钟（两通道共用）。
 
 ### POST /api/ai/jev-rank
 
-AI 快排：一次 systemone 调用（state = 用户品味档案 + 清单全文；questions = 每件作品一个 Noul 问题，并行评估）对**最多 255 件**作品打 0–1 分，按分降序返回。`order` 为 `works` 数组下标，同分按原序稳定。
+AI 快排：一次 systemone 调用（state = 用户品味档案 + 清单全文；questions = 每件作品一个 Noul 问题，并行评估）对**最多 255 件**作品打 0–1 分，按分降序返回。`order` 为 `works` 数组下标，同分按原序稳定。凭据解析同 `/api/ai/jev/test`：用户 Key 优先，`useBuiltin` 走免费通道。
 
 **请求体：**
 ```json
@@ -664,15 +664,17 @@ AI 快排：一次 systemone 调用（state = 用户品味档案 + 清单全文�
   "works": [{ "id": "w1", "title": "…", "creator": "…", "year": 2010 }],
   "profileContext": "（可选，≤4096 字符的既有榜单摘要）",
   "locale": "zh",
-  "config": { "apiKey": "…" }
+  "config": { "apiKey": "…" },
+  "useBuiltin": true
 }
 ```
-**响应：** `{ "ok": true, "model": "jev-1.13.0", "order": [2, 0, 1], "scores": [0.72, 0.68, 0.59], "inputTokens": 567 }`；错误沿用 AI 错误码（`invalid_config` / `invalid_data` / `rate_limited` / `upstream_auth_failed` / `upstream_rate_limited` / `upstream_error`）。
-**限流：** 桶 `ai_jev` 10 次/10 分钟。
+（`config` 与 `useBuiltin` 二选一；`config` 合法时永远优先。）
+**响应：** `{ "ok": true, "model": "jev-1.13.0", "order": [2, 0, 1], "scores": [0.72, 0.68, 0.59], "inputTokens": 567 }`；错误沿用 AI 错误码（`invalid_config` / `builtin_unavailable` / `invalid_data` / `rate_limited` / `upstream_auth_failed` / `upstream_rate_limited` / `upstream_error`）。
+**限流：** 桶 `ai_jev` 10 次/10 分钟（两通道共用）。
 
 ### POST /api/ai/jev-pick
 
-1v1 取舍预测（辅助模式）：一次 systemone 调用（Choice 二选一）预测用户会保留哪件，返回校准置信度。前端阈值 0.8——达到则自动落位（可撤销），低于则交还用户；复测阶段不调用。
+1v1 取舍预测（辅助模式）：一次 systemone 调用（Choice 二选一）预测用户会保留哪件，返回校准置信度。前端阈值 0.8——达到则自动落位（可撤销），低于则交还用户；复测阶段不调用。凭据解析同 `/api/ai/jev/test`。
 
 **请求体：**
 ```json
@@ -682,17 +684,18 @@ AI 快排：一次 systemone 调用（state = 用户品味档案 + 清单全文�
   "right": { "title": "…", "year": 1993 },
   "profileContext": "（可选，≤4096 字符）",
   "locale": "zh",
-  "config": { "apiKey": "…" }
+  "config": { "apiKey": "…" },
+  "useBuiltin": true
 }
 ```
 **响应：** `{ "ok": true, "model": "jev-1.13.0", "pick": "left", "confidence": 0.98, "probabilities": { "left": 0.99, "right": 0.01 }, "inputTokens": 427 }`；错误沿用 AI 错误码。
-**限流：** 桶 `ai_jev_pick` 60 次/10 分钟。
+**限流：** 桶 `ai_jev_pick` 60 次/10 分钟（两通道共用）。
 
 ### POST /api/ai/jev-disambiguate
 
 Choice 多选一（迭代 2/20 新增，用于「哪个候选才是用户要的那件作品」）。与 `/api/ai/jev-pick` 的区别是基数：这里是 2–255 选一，`criteria` 逐条铺开候选描述，一次问清。
 
-**调用铁律：本端点永远不是主链路。** key 存在浏览器 localStorage，Worker 拿不到；未配置 key 一律 `400 invalid_config`，上游失败响应附 `fallback: "rules"`，调用方必须回落规则路径（`docs/agents/CONVENTIONS.md` §3）。
+**调用铁律：本端点永远不是主链路。** 上游失败响应附 `fallback: "rules"`，调用方必须回落规则路径（`docs/agents/CONVENTIONS.md` §3）。凭据解析同 `/api/ai/jev/test`（用户 Key 优先 / `useBuiltin` 走免费通道）；凭据不可用时仍返回非 2xx（`400 invalid_config` 或 `503 builtin_unavailable`），调用方照旧回落。
 
 **请求体：**
 ```json

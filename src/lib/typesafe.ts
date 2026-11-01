@@ -1,13 +1,15 @@
 /**
  * Jev(TypeSafe)前端调用层:配置存取 + AI 快排请求。
  *
- * 与 aiInsight.ts 同一原则:配置只存本浏览器 localStorage;请求经同源
- * Worker 转发(Worker 不落盘 key);保留失败原因,不折叠成 null——
- * 界面要能说清「是限流、没配置,还是 key 错了」。
+ * 与 aiInsight.ts 同一原则:用户自己的配置只存本浏览器 localStorage;请求经
+ * 同源 Worker 转发(Worker 不落盘用户 key);未配置 key 时发 useBuiltin 走
+ * 站内免费通道(key 在 Worker Secret,前端拿不到也看不到);保留失败原因,
+ * 不折叠成 null——界面要能说清「是限流、没配置,还是 key 错了」。
  */
 
 export type JevErrorCode =
   | "invalid_config"
+  | "builtin_unavailable"
   | "invalid_data"
   | "rate_limited"
   | "upstream_auth_failed"
@@ -98,13 +100,14 @@ function failureFrom(
 }
 
 export async function testJevConfig(
-  config: JevUserConfig,
+  config: JevUserConfig | null,
 ): Promise<{ ok: true; model: string } | JevFailure> {
   try {
     const response = await fetch("/api/ai/jev/test", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ config }),
+      // config=null + useBuiltin → Worker 用站主 Secret 走免费通道(用户 key 永远优先)
+      body: JSON.stringify({ config, ...(config ? {} : { useBuiltin: true }) }),
       signal: AbortSignal.timeout(40000),
     });
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
@@ -117,13 +120,13 @@ export async function testJevConfig(
 
 export async function requestJevRanking(
   input: JevRankInput,
-  config: JevUserConfig,
+  config: JevUserConfig | null,
 ): Promise<JevRankResult> {
   try {
     const response = await fetch("/api/ai/jev-rank", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...input, config }),
+      body: JSON.stringify({ ...input, config, ...(config ? {} : { useBuiltin: true }) }),
       signal: AbortSignal.timeout(40000),
     });
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
@@ -151,6 +154,10 @@ const FAILURE_MESSAGES: Record<JevErrorCode, [string, string]> = {
   invalid_config: [
     "TypeSafe API Key 不合法,请到「AI 服务」重新配置",
     "Invalid TypeSafe API key — reconfigure in AI services",
+  ],
+  builtin_unavailable: [
+    "站内免费通道暂不可用,可在「AI 服务」配置自己的 TypeSafe Key",
+    "The built-in free channel is unavailable — configure your own TypeSafe key in AI services",
   ],
   invalid_data: ["作品数据不合法", "Invalid work data"],
   rate_limited: ["操作太频繁,请几分钟后再试", "Too many attempts — retry in a few minutes"],
@@ -257,13 +264,13 @@ export type JevPickResult = JevPickSuccess | JevFailure;
 /** 1v1 取舍预测:置信度由调用方设阈值,低于阈值不代判。 */
 export async function requestJevPick(
   input: JevPickInput,
-  config: JevUserConfig,
+  config: JevUserConfig | null,
 ): Promise<JevPickResult> {
   try {
     const response = await fetch("/api/ai/jev-pick", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...input, config }),
+      body: JSON.stringify({ ...input, config, ...(config ? {} : { useBuiltin: true }) }),
       signal: AbortSignal.timeout(40000),
     });
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;

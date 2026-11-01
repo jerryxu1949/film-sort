@@ -380,20 +380,12 @@ export function useSorting(deps: SortingDeps) {
   }
 
   /** AI 快排(Jev):把选中作品交给决策模型预测完整顺序,直接成榜。
-   *  落库路径与 saveWithoutSortingFn 完全一致,只是顺序来自 Jev 预测。 */
+   *  落库路径与 saveWithoutSortingFn 完全一致,只是顺序来自 Jev 预测。
+   *  未配置 key 时走站内免费通道(Worker Secret),失败再提示具体原因。 */
   async function startJevRanking() {
     const d = depsRef.current;
     if (!collection || selected.length < 2 || jevBusy) return;
     const config = readTypesafeConfig();
-    if (!config) {
-      d.setNotice(
-        d.t(
-          "先在「设置 → AI 服务」里配置 TypeSafe API Key,再使用 AI 快排。",
-          "Configure a TypeSafe API key under Settings → AI services first.",
-        ),
-      );
-      return;
-    }
     const kept = collection.works.filter((work) => selected.includes(work.id));
     setJevBusy(true);
     track("jev_rank_started", { mode: kind, item_count: kept.length });

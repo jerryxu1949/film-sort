@@ -131,7 +131,7 @@ ART/RANK 把"从看过、读过、听过的作品里排出自己的 Top N"拆成
 
 - 导入对方 JSON 或生成压缩链接和二维码。
 - 计算作品重合度、加权偏好、Top 3 共识、顺序一致率和最大名次分歧；支持 AI 比较解读。
-- **Jev 预测分歧**：「对方最出乎你意料的作品」——用你的品味档案（Jev/TypeSafe）预测对方榜单的排名，与真实排名求偏差 Top3（需在「AI 服务」配置 TypeSafe Key）。
+- **Jev 预测分歧**：「对方最出乎你意料的作品」——用你的品味档案（Jev/TypeSafe）预测对方榜单的排名，与真实排名求偏差 Top3（未配置 Key 自动走站内免费通道；配置了则用你自己的）。
 
 ### AI 点评（榜单 / 画像 / 比较）
 
@@ -396,7 +396,7 @@ film-sort3/
 | 健康 / 统计 | `GET /api/health`、`GET /api/stats` | 健康检查、公开统计 |
 | 海报与详情 | `GET /api/posters`、`GET /api/image`、`GET /api/{book,movie,music,other}/detail`、`GET /api/artwork/detail`、`POST /api/posters/batch` | 三级来源取图、图片代理、统一作品详情、批量海报（含 outcome 三态） |
 | 搜索与榜单 | `GET /api/{book,movie,music,other}/list`、`GET /api/douban/top250` 系列、`GET /api/douban/suggest` 系列 | 各媒介搜索与 Top250 |
-| AI（点评 / Jev） | `POST /api/insights`、`POST /api/ai/test`、`POST /api/ai/models`、`POST /api/ai/jev/{test,rank,pick,disambiguate}` | AI 点评双通道；Jev 决策四端点（key 只存浏览器） |
+| AI（点评 / Jev） | `POST /api/insights`、`POST /api/ai/test`、`POST /api/ai/models`、`POST /api/ai/jev/{test,rank,pick,disambiguate}` | AI 点评双通道；Jev 决策四端点（用户 key 只存浏览器；站主免费通道 key 存 Worker Secret `JEV_API_KEY`） |
 | 导入 | `GET /api/import/{doulist,douban-list,netease}`、`GET /api/import/netease/mine` | 豆列 / 想看已看 / 歌单导入（登录用户） |
 | 网易云 / 豆瓣连接 | `GET /api/{netease,douban}/qr/{issue,poll}`、`GET|POST /api/{netease,douban}/{status,cookie,disconnect}` | 扫码 / Cookie 连接与状态 |
 | 账户 | `POST /api/account/{register,login,logout,send-code,change-password}`、`GET|PUT /api/account/profile`、`GET|POST|DELETE /api/account/collections`、`GET /api/account/oauth/*`、`GET /api/auth/config` | 注册（含邮箱验证码）、登录、画像与清单云同步、OAuth |
