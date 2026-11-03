@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { flushSync } from "react-dom";
 
 export type View =
   | "home"
@@ -54,13 +55,23 @@ export function pathToView(p: string): View | null {
  * 失败不外抛：View Transition 只是装饰，导航本身必须照旧完成。
  */
 function withViewTransition(render: () => void) {
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => void };
+  // 过渡样式只写在 `:root:not([data-theme])` 下（现代主题）。其他主题直接
+  // 同步切换，避免原生交叉溶解盖掉它们自己的换页效果。
+  if (typeof document === "undefined" || document.documentElement.hasAttribute("data-theme")) {
+    render();
+    return;
+  }
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
   if (typeof doc.startViewTransition !== "function") {
     render();
     return;
   }
   try {
-    doc.startViewTransition(render);
+    // React 的 setState 是异步提交的：不在回调里同步刷新的话，浏览器拍到的
+    // “新”快照仍是旧界面，过渡会变成一次无变化的空转。
+    doc.startViewTransition(() => {
+      flushSync(render);
+    });
   } catch {
     render();
   }

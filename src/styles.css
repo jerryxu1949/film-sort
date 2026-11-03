@@ -2192,7 +2192,7 @@ body[data-theme=classic]{
   background:var(--m-card-surface);
   transform:rotateX(var(--md-tilt-x)) rotateY(var(--md-tilt-y));transform-style:preserve-3d;
   transition:translate var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out),border-color var(--dur-2) var(--ease-out),transform var(--dur-2) var(--ease-out)}
-:root:not([data-theme]) .medium-section .medium-item:hover,.medium-section .medium-item:focus-visible{translate:0 -5px;box-shadow:var(--m-glow-hover);border-color:color-mix(in srgb,var(--accent) 42%,transparent)}
+:root:not([data-theme]) .medium-section .medium-item:hover,:root:not([data-theme]) .medium-section .medium-item:focus-visible{translate:0 -5px;box-shadow:var(--m-glow-hover);border-color:color-mix(in srgb,var(--accent) 42%,transparent)}
 :root:not([data-theme]) .medium-section .medium-item:before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--m-sheen),transparent);opacity:.55;transition:opacity var(--dur-2)}
 :root:not([data-theme]) .medium-section .medium-item:after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;pointer-events:none;
   background:linear-gradient(100deg,transparent,color-mix(in srgb,var(--text) 10%,transparent),transparent);transform:skewX(-16deg);transition:left .65s var(--ease-out)}
@@ -2208,8 +2208,12 @@ body[data-theme=classic]{
 :root:not([data-theme]) .section-heading h2{font-size:var(--t-h2);letter-spacing:.01em}
 :root:not([data-theme]) .section-heading>span{font-family:var(--font-mono);font-size:11px;color:var(--text-4);letter-spacing:var(--ls-mid)}
 
-/* 入场编排：卡片 stagger + hero 三段上升，reduced-motion 由头部全局规则熔断 */
-:root:not([data-theme]) .medium-section .medium-item{animation:cardAppear .5s var(--ease-out) both}
+/* 入场编排：卡片 stagger + hero 三段上升，reduced-motion 由头部全局规则熔断。
+   只动 opacity/translate/scale 三个独立属性，绝不动 transform：卡片的 3D tilt
+   由 HomeView 写内联 transform，动画若用 transform（尤其 both 填充）会按住
+   内联值，悬停倾斜就永远看不到。backwards 只覆盖延迟期，结束后交还属性。 */
+@keyframes md-card-in{from{opacity:0;translate:0 10px;scale:.97}to{opacity:1;translate:0 0;scale:1}}
+:root:not([data-theme]) .medium-section .medium-item{animation:md-card-in .5s var(--ease-out) backwards}
 :root:not([data-theme]) .medium-section .medium-item:nth-child(2){animation-delay:var(--dur-stagger)}
 :root:not([data-theme]) .medium-section .medium-item:nth-child(3){animation-delay:calc(var(--dur-stagger) * 2)}
 :root:not([data-theme]) .medium-section .medium-item:nth-child(4){animation-delay:calc(var(--dur-stagger) * 3)}
