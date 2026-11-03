@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { getCollectionsByKind, mediaLabels, type Artwork, type MediaKind } from "../data/media";
 import { DeferredOrb } from "../components/DeferredOrb";
+import { HeroBackdrop } from "../components/HeroBackdrop";
 import { Poster } from "../components/Poster";
 import { useThemeFamily } from "../lib/useTheme";
 import { fileInput } from "./helpers";
@@ -78,6 +79,7 @@ export function HomeView({
     <>
       <section className={`orb-hero${isEditorial ? " ed-hero" : ""}`}>
         {!isEditorial && <DeferredOrb />}
+        {!isEditorial && <HeroBackdrop />}
         <div className={`orb-hero-inner${isEditorial ? " ed-hero-inner" : ""}`}>
           <div className="home-heading">
             <div>
