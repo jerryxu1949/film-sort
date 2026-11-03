@@ -46,6 +46,26 @@ export function pathToView(p: string): View | null {
   return (Object.entries(VIEW_PATH) as [View, string][]).find(([, v]) => clean === v)?.[0] ?? null;
 }
 
+/**
+ * 视图切换用 View Transitions API 做跨视图过渡（现代浏览器的原生能力，
+ * 纯增量：不支持时退回瞬间切换，视觉零回归）。过渡的样式只在 `.view-`
+ * 作用域里定义，`:root` 的 `::view-transition-old/new(*)` 只做极薄的交叉溶解，
+ * 不碰任何布局。`prefers-reduced-motion` 由 styles.css 头部的全局规则熔断。
+ * 失败不外抛：View Transition 只是装饰，导航本身必须照旧完成。
+ */
+function withViewTransition(render: () => void) {
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => void };
+  if (typeof doc.startViewTransition !== "function") {
+    render();
+    return;
+  }
+  try {
+    doc.startViewTransition(render);
+  } catch {
+    render();
+  }
+}
+
 export function useRouter() {
   const [view, setView] = useState<View>("home");
   const [plazaPostId, setPlazaPostId] = useState<number>(0);
@@ -58,13 +78,13 @@ export function useRouter() {
     if (nextView === "plazaPost" && typeof nextViewOrPlaza === "string") {
       const id = Number(nextViewOrPlaza.split(":")[1]) || 0;
       setPlazaPostId(id);
-      setView("plazaPost");
+      withViewTransition(() => setView("plazaPost"));
       const lang = new URLSearchParams(location.search).get("lang");
       const qs = lang ? `?lang=${lang}` : "";
       history.pushState({ view: "plazaPost" }, "", `/plaza/${id}${qs}`);
       return;
     }
-    setView(nextView);
+    withViewTransition(() => setView(nextView));
     const lang = new URLSearchParams(location.search).get("lang");
     const qs = lang ? `?lang=${lang}` : "";
     history.pushState({ view: nextView }, "", VIEW_PATH[nextView] + qs);
@@ -85,12 +105,12 @@ export function useRouter() {
     function onPopState() {
       const v = pathToView(location.pathname);
       if (v) {
-        setView(v);
+        withViewTransition(() => setView(v));
         if (v === "plazaPost") {
           const match = location.pathname.match(/^\/plaza\/(\d+)/);
           if (match) setPlazaPostId(Number(match[1]));
         }
-      } else setView("home");
+      } else withViewTransition(() => setView("home"));
     }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
